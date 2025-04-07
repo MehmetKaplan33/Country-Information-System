@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "env": {
+    "WEATHER_API_KEY": "@weather_api_key",
+    "GEOCODE_API_KEY": "@geocode_api_key",
+    "EXCHANGE_RATE_API_KEY": "@exchange_rate_api_key"
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    }
+  ],
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    }
+  ]
+}

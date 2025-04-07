@@ -10,6 +10,9 @@ class CountryManager {
     this.CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 saat
     this.BACKUP_API = 'https://restcountries.com/v3.1/all';
     this.API_BASE_URL = 'https://restcountries.com/v3.1'; // Doğrudan API'ye yönlendir
+    this.API_URL = process.env.NODE_ENV === 'production' 
+      ? 'https://your-vercel-app-url.vercel.app'  // Vercel URL'nizi buraya ekleyin
+      : 'http://localhost:3000';
   }
 
   async initialize() {
@@ -57,13 +60,11 @@ class CountryManager {
 
   async fetchFromPrimarySource() {
     try {
-      // Doğrudan RestCountries API'sini kullan
-      const response = await fetch(`${this.API_BASE_URL}/all`, {
+      const response = await fetch(`${this.API_URL}/api/countries`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-        },
-        mode: 'cors'
+        }
       });
 
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -447,6 +448,10 @@ const weatherCache = new Map();
 const CACHE_DURATION = 10 * 60 * 1000; // 10 dakika
 
 async function getWeatherData(lat, lng) {
+  const API_URL = process.env.NODE_ENV === 'production'
+    ? 'https://your-vercel-app-url.vercel.app'  // Vercel URL'nizi buraya ekleyin
+    : 'http://localhost:3000';
+
   const cacheKey = `${lat},${lng}`;
   const now = Date.now();
 
@@ -458,7 +463,7 @@ async function getWeatherData(lat, lng) {
   }
 
   const response = await fetch(
-    `http://localhost:3000/api/weather?lat=${lat}&lon=${lng}`
+    `${API_URL}/api/weather?lat=${lat}&lon=${lng}`
   );
   if (!response.ok) throw new Error("Hava durumu verisi alınamadı");
 
@@ -832,6 +837,10 @@ function updateCharts(data) {
 
 // Para birimi çevirici işlemleri
 async function updateCurrencyConverter(data) {
+  const API_URL = process.env.NODE_ENV === 'production'
+    ? 'https://your-vercel-app-url.vercel.app'  // Vercel URL'nizi buraya ekleyin
+    : 'http://localhost:3000';
+
   const fromCurrencySelect = document.getElementById("fromCurrency");
   const toCurrencySelect = document.getElementById("toCurrency");
   const convertBtn = document.getElementById("convertBtn");
@@ -842,7 +851,7 @@ async function updateCurrencyConverter(data) {
   const newConvertBtn = document.getElementById("convertBtn");
 
   try {
-    const response = await fetch(`http://localhost:3000/api/currency?from=USD`);
+    const response = await fetch(`${API_URL}/api/currency?from=USD`);
     const currencyData = await response.json();
     const currencies = Object.keys(currencyData.rates);
     const countryCurrency = Object.keys(data.currencies)[0];
@@ -875,7 +884,7 @@ async function updateCurrencyConverter(data) {
           '<div class="alert alert-info">Dönüştürülüyor...</div>';
 
         const response = await fetch(
-          `http://localhost:3000/api/currency?from=${fromCurrency}&to=${toCurrency}&amount=${amountValue}`
+          `${API_URL}/api/currency?from=${fromCurrency}&to=${toCurrency}&amount=${amountValue}`
         );
         const data = await response.json();
         const result = amountValue * data.rates[toCurrency];
