@@ -1,98 +1,163 @@
 // Ülke listesi için global değişken
 let countries = [];
 
-// Sayfa yüklendiğinde ülke listesini al
-document.addEventListener("DOMContentLoaded", async () => {
-  async function fetchWithTimeout(url, options = {}) {
-    const { timeout = 5000 } = options;
-    
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-    
+// CountryManager sınıfını ekle
+class CountryManager {
+  constructor() {
+    this.countries = [];
+    this.lastFetch = 0;
+    this.isFetching = false;
+    this.CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 saat
+    this.BACKUP_API = 'https://restcountries.com/v3.1/all';
+  }
+
+  async initialize() {
+    showLoading();
     try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal
-      });
-      clearTimeout(id);
-      return response;
+      await this.loadCountries();
+      console.log("✅ Ülkeler başarıyla yüklendi:", this.countries.length);
+      hideLoading();
+      return true;
     } catch (error) {
-      clearTimeout(id);
-      throw error;
+      console.error("❌ Ülke verisi yüklenemedi:", error);
+      hideLoading();
+      renderError(error);
+      return false;
     }
   }
 
-  async function fetchCountriesWithRetry(retries = 5) {
-    let lastError = null;
-    let delay = 2000; // İlk bekleme süresi
-  
-    for (let i = 0; i < retries; i++) {
-      try {
-        console.info(`🌍 Ülke verileri yükleniyor... (${i + 1}/${retries})`);
-  
-        const response = await fetchWithTimeout("http://localhost:3000/api/countries", {
-          timeout: 8000, // 8 saniye timeout
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
-  
-        if (!response.ok) {
-          throw new Error(`Sunucu hatası: ${response.status}`);
-        }
-  
-        const data = await response.json();
-  
-        if (!Array.isArray(data) || data.length === 0) {
-          throw new Error("Geçersiz veri formatı");
-        }
-  
-        // Veriyi önbelleğe al
-        localStorage.setItem('countriesCache', JSON.stringify({
-          data: data,
-          timestamp: Date.now()
-        }));
-  
-        console.info(`✅ ${data.length} ülke başarıyla yüklendi`);
-        return data;
-  
-      } catch (error) {
-        lastError = error;
-        console.warn(`❌ Deneme ${i + 1} başarısız: ${error.message}`);
-        
-        // Son denemede değilsek tekrar dene
-        if (i < retries - 1) {
-          console.info(`🔄 ${delay/1000} saniye sonra tekrar denenecek...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 1.5; // Her denemede bekleme süresini artır
-        }
-      }
+  async loadCountries() {
+    if (this.isFetching) {
+      return this.countries;
     }
-  
-    // Tüm denemeler başarısız olduysa önbellekteki verileri kontrol et
-    const cachedData = localStorage.getItem('countriesCache');
-    if (cachedData) {
-      const { data, timestamp } = JSON.parse(cachedData);
-      const cacheAge = Date.now() - timestamp;
-      
-      // Önbellek 1 saatten eski değilse kullan
-      if (cacheAge < 3600000) {
-        console.info('📦 Önbellekteki veriler kullanılıyor...');
-        return data;
-      }
+
+    const cached = this.getCachedData();
+    if (cached) {
+      this.countries = cached;
+      return this.countries;
     }
-  
-    throw new Error(`Ülke verileri yüklenemedi: ${lastError?.message}`);
+
+    this.isFetching = true;
+    try {
+      const data = await this.fetchFromPrimarySource();
+      this.updateCache(data);
+      this.countries = data;
+    } catch (error) {
+      console.warn("⚠️ Birincil kaynak başarısız, yedek kaynak deneniyor...");
+      const backupData = await this.fetchFromBackupSource();
+      this.updateCache(backupData);
+      this.countries = backupData;
+    } finally {
+      this.isFetching = false;
+    }
+
+    return this.countries;
   }
 
-  try {
-    countries = await fetchCountriesWithRetry();
-    console.log("Ülkeler yüklendi:", countries.length);
+  async fetchFromPrimarySource() {
+    const response = await fetch("http://localhost:3000/api/countries", {
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Sunucu hatası: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error("Geçersiz veri formatı");
+    }
+
+    return data;
+  }
+
+  async fetchFromBackupSource() {
+    const response = await fetch(this.BACKUP_API);
+    if (!response.ok) {
+      throw new Error("Yedek API'den veri alınamadı");
+    }
+
+    const data = await response.json();
+    return data;
+  }
+
+  getCachedData() {
+    try {
+      const cached = localStorage.getItem('countriesCache');
+      if (!cached) return null;
+
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < this.CACHE_DURATION) {
+        console.info('📦 Önbellekten veriler yükleniyor...');
+        return data;
+      }
+    } catch (error) {
+      console.warn('⚠️ Önbellek hatası, temizleniyor...');
+      localStorage.removeItem('countriesCache');
+    }
+    return null;
+  }
+
+  updateCache(data) {
+    try {
+      localStorage.setItem('countriesCache', JSON.stringify({
+        data,
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      console.warn('⚠️ Önbellek güncelleme hatası:', error);
+    }
+  }
+
+  findCountry(name) {
+    return this.countries.find(country => 
+      country.name.common.toLowerCase() === name.toLowerCase() ||
+      country.name.official.toLowerCase() === name.toLowerCase()
+    );
+  }
+
+  // Yeni metod ekle
+  async getNeighborCountries(borders) {
+    if (!borders || !Array.isArray(borders) || borders.length === 0) {
+      return [];
+    }
+
+    // Önce yerel veride ara
+    const localNeighbors = borders.map(code => 
+      this.countries.find(country => country.cca3 === code)
+    ).filter(Boolean);
+
+    if (localNeighbors.length === borders.length) {
+      return localNeighbors;
+    }
+
+    // Yerel veride bulunamazsa API'den al
+    try {
+      const response = await fetch(
+        `http://localhost:3000/api/countries/codes/${borders.join(",")}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Komşu ülkeler getirilemedi");
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error("Neighbor countries fetch error:", error);
+      return localNeighbors; // En azından yerel verideki komşuları döndür
+    }
+  }
+}
+
+// Global CountryManager instance
+const countryManager = new CountryManager();
+
+// DOMContentLoaded event listener'ı güncelle
+document.addEventListener("DOMContentLoaded", async () => {
+  if (await countryManager.initialize()) {
+    countries = countryManager.countries;
     initializeAutocomplete();
-  } catch (error) {
-    console.error("Ülke listesi yüklenirken hata oluştu:", error);
-    renderError(error);
   }
 });
 
@@ -296,30 +361,41 @@ async function onSuccess(position) {
   document.querySelector("#btnSearch").click();
 }
 
-async function getCountry(country) {
+async function getCountry(countryName) {
   try {
     showLoading();
-    const response = await fetch(
-      `http://localhost:3000/api/countries/name/${encodeURIComponent(country)}`
-    );
+    
+    // Önce yerel veride ara
+    const localCountry = countryManager.findCountry(countryName);
+    let countryData;
 
-    if (!response.ok) {
-      throw new Error("Ülke bulunamadı");
+    if (localCountry) {
+      countryData = localCountry;
+    } else {
+      // Yerel veride bulunamazsa API'den al
+      const response = await fetch(
+        `http://localhost:3000/api/countries/name/${encodeURIComponent(countryName)}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Ülke bulunamadı");
+      }
+
+      const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error("Ülke verisi alınamadı");
+      }
+
+      countryData = data[0];
     }
 
-    const data = await response.json();
-    if (!Array.isArray(data) || data.length === 0) {
-      throw new Error("Ülke verisi alınamadı");
-    }
-
-    const countryData = data[0];
+    // Ülke detaylarını göster
     renderCountry(countryData);
 
-    // Komşu ülkelerin görüntülenmesi
+    // Komşu ülkeleri göster
     const borders = countryData.borders;
     let neighborsHtml = '<div class="card mb-3"><div class="card-header">';
-    neighborsHtml +=
-      '<i class="fas fa-globe-americas me-2"></i>Komşu Ülkeler</div>';
+    neighborsHtml += '<i class="fas fa-globe-americas me-2"></i>Komşu Ülkeler</div>';
     neighborsHtml += '<div class="card-body">';
 
     if (!borders || !Array.isArray(borders) || borders.length === 0) {
@@ -328,49 +404,37 @@ async function getCountry(country) {
           <i class="fas fa-map-marker-alt mb-3" style="font-size: 2rem; color: #6c757d;"></i>
           <p class="lead mb-0">${countryData.name.common} bir ada ülkesidir veya kara sınırı bulunmamaktadır.</p>
         </div>`;
-      neighborsHtml += "</div></div>";
-      document.querySelector("#neighbors").innerHTML = neighborsHtml;
-      return;
-    }
-
-    const response2 = await fetch(
-      `http://localhost:3000/api/countries/codes/${borders.join(",")}`
-    );
-
-    if (!response2.ok) {
-      throw new Error("Komşu ülkeler getirilemedi");
-    }
-
-    const neighbors = await response2.json();
-    if (Array.isArray(neighbors) && neighbors.length > 0) {
-      neighborsHtml += '<div class="neighbors-grid">';
-      neighbors.forEach((country) => {
-        neighborsHtml += `
-          <div class="neighbor-card" data-country="${country.name.common}">
-            <img src="${country.flags.png}" alt="${
-          country.name.common
-        } bayrağı">
-            <div class="neighbor-info">
-              <h3 class="neighbor-title">${country.name.common}</h3>
-              <div class="neighbor-details">
-                <div>
-                  <i class="fas fa-city"></i>
-                  Başkent: ${country.capital?.[0] || "Bilinmiyor"}
-                </div>
-                <div>
-                  <i class="fas fa-users"></i>
-                  Nüfus: ${(country.population / 1000000).toFixed(1)} milyon
-                </div>
-                <div>
-                  <i class="fas fa-globe"></i>
-                  Bölge: ${country.region}
+    } else {
+      const neighbors = await countryManager.getNeighborCountries(borders);
+      
+      if (neighbors.length > 0) {
+        neighborsHtml += '<div class="neighbors-grid">';
+        neighbors.forEach((country) => {
+          neighborsHtml += `
+            <div class="neighbor-card" data-country="${country.name.common}">
+              <img src="${country.flags.png}" alt="${country.name.common} bayrağı">
+              <div class="neighbor-info">
+                <h3 class="neighbor-title">${country.name.common}</h3>
+                <div class="neighbor-details">
+                  <div>
+                    <i class="fas fa-city"></i>
+                    Başkent: ${country.capital?.[0] || "Bilinmiyor"}
+                  </div>
+                  <div>
+                    <i class="fas fa-users"></i>
+                    Nüfus: ${(country.population / 1000000).toFixed(1)} milyon
+                  </div>
+                  <div>
+                    <i class="fas fa-globe"></i>
+                    Bölge: ${country.region}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        `;
-      });
-      neighborsHtml += "</div>";
+          `;
+        });
+        neighborsHtml += "</div>";
+      }
     }
 
     neighborsHtml += "</div></div>";
@@ -385,6 +449,7 @@ async function getCountry(country) {
         getCountry(countryName);
       });
     });
+
   } catch (err) {
     console.error("Country fetch error:", err);
     renderError(err);

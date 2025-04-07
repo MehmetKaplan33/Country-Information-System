@@ -681,6 +681,7 @@ body {
 /* Harita Kontrolleri */
 .leaflet-control-zoom {
   margin: 20px !important;
+  border: none !important;
 }
 
 .leaflet-control-zoom a {
@@ -692,6 +693,7 @@ body {
   height: 40px !important;
   line-height: 40px !important;
   transition: all 0.3s ease !important;
+  margin: 5px !important;
 }
 
 .leaflet-control-zoom a:hover {
@@ -972,6 +974,88 @@ body {
 
 [data-theme="dark"] .weather-marker {
   background: var(--card-background);
+}
+
+/* Mobil için Hava Durumu Widget Düzenlemeleri */
+@media (max-width: 768px) {
+  .map-legend {
+    bottom: 15px;
+    right: 15px;
+    left: auto; /* Sol tarafı otomatik bırak */
+    width: auto; /* Genişliği içeriğe göre ayarla */
+    max-width: 200px; /* Maksimum genişliği sınırla */
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.98);
+  }
+
+  .map-legend h5 {
+    display: none; /* Başlığı gizle */
+  }
+
+  .weather-marker {
+    padding: 0.75rem;
+    gap: 0.75rem;
+    grid-template-columns: auto 1fr;
+  }
+
+  .weather-marker i {
+    font-size: 2rem;
+    grid-row: 1;
+  }
+
+  .weather-marker .temp {
+    font-size: 1.5rem;
+    margin-bottom: 0;
+  }
+
+  .weather-marker .city {
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .weather-marker .description {
+    display: none; /* Açıklamayı gizle */
+  }
+
+  .weather-marker .details {
+    display: none; /* Detayları gizle */
+  }
+
+  .weather-marker .feels-like {
+    font-size: 0.8rem;
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 576px) {
+  .map-legend {
+    bottom: 10px;
+    right: 10px;
+    max-width: 180px;
+    padding: 0.75rem;
+    border-radius: 12px;
+  }
+
+  .weather-marker {
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .weather-marker i {
+    font-size: 1.75rem;
+  }
+
+  .weather-marker .temp {
+    font-size: 1.25rem;
+  }
+
+  .weather-marker .city {
+    font-size: 0.8rem;
+  }
+
+  .weather-marker .feels-like {
+    font-size: 0.75rem;
+  }
 }
 
 /* İstatistik Grafikleri Stilleri */

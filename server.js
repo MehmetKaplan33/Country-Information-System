@@ -71,7 +71,7 @@ app.get('/api/currency', async (req, res) => {
 
 // Countries endpoint - veri önbelleğe alma ve hata yönetimi iyileştirmesi
 let cachedCountries = null;
-const CACHE_DURATION = 30 * 60 * 1000; // 30 dakika
+const CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 saat
 const MAX_RETRIES = 3;
 let lastFetch = 0;
 
@@ -83,7 +83,7 @@ async function fetchWithRetry(url, options = {}, retries = MAX_RETRIES) {
             const response = await axios({
                 url,
                 ...options,
-                timeout: 5000,
+                timeout: 15000,
                 validateStatus: status => status < 500
             });
             return response;
@@ -103,56 +103,38 @@ app.get('/api/countries', async (req, res) => {
         
         // Önbellekteki veri taze ise onu kullan
         if (cachedCountries && (now - lastFetch < CACHE_DURATION)) {
-            console.log('Serving from cache');
+            console.log('Serving from server cache');
+            res.set('Cache-Control', 'public, max-age=1800'); // 30 dakika client cache
             return res.json(cachedCountries);
         }
 
-        const response = await fetchWithRetry('https://restcountries.com/v3.1/all');
+        const response = await axios({
+            url: 'https://restcountries.com/v3.1/all',
+            timeout: 10000, // 10 saniye timeout
+            validateStatus: status => status < 500
+        });
         
         if (!response.data || !Array.isArray(response.data)) {
-            throw new Error('Invalid data format from API');
+            throw new Error('Invalid data format from external API');
         }
 
-        const processedData = response.data
-            .filter(country => country && country.name && country.cca3)
-            .map(country => ({
-                name: {
-                    common: country.name.common || '',
-                    official: country.name.official || '',
-                    nativeName: country.name.nativeName || {}
-                },
-                cca2: country.cca2,
-                cca3: country.cca3,
-                capital: Array.isArray(country.capital) ? country.capital : ['Bilinmiyor'],
-                region: country.region || '',
-                languages: country.languages || {},
-                currencies: country.currencies || {},
-                population: Number(country.population) || 0,
-                flags: {
-                    png: country.flags?.png || '',
-                    svg: country.flags?.svg || ''
-                },
-                borders: Array.isArray(country.borders) ? country.borders : [],
-                area: Number(country.area) || 0,
-                timezones: Array.isArray(country.timezones) ? country.timezones : ['UTC'],
-                latlng: Array.isArray(country.latlng) ? country.latlng : [0, 0],
-                capitalInfo: country.capitalInfo || { latlng: [0, 0] },
-                car: country.car || { signs: [], side: 'right' },
-                idd: country.idd || { root: '', suffixes: [''] },
-                tld: Array.isArray(country.tld) ? country.tld : ['.unknown']
-            }))
+        // Veriyi işle ve önbelleğe al
+        cachedCountries = response.data
+            .filter(country => country && country.name)
             .sort((a, b) => a.name.common.localeCompare(b.name.common));
-
-        cachedCountries = processedData;
+            
         lastFetch = now;
         
-        return res.json(processedData);
+        res.set('Cache-Control', 'public, max-age=1800');
+        return res.json(cachedCountries);
+
     } catch (error) {
         console.error('Countries API Error:', error.message);
         
         // Önbellekteki veri varsa, hatada onu kullan
         if (cachedCountries) {
             console.log('Serving stale cache after error');
+            res.set('Cache-Control', 'public, max-age=300'); // 5 dakika cache
             return res.json(cachedCountries);
         }
         
