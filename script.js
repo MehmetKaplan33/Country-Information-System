@@ -1,6 +1,9 @@
 // Ülke listesi için global değişken
 let countries = [];
 
+// API URL tanımlaması - window.location ile mevcut domain'i kullanıyoruz
+const API_BASE_URL = window.location.origin;
+
 // Sayfa yüklendiğinde ülke listesini al
 document.addEventListener("DOMContentLoaded", async () => {
   async function fetchWithTimeout(url, options = {}) {
@@ -30,7 +33,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       try {
         console.info(`🌍 Ülke verileri yükleniyor... (${i + 1}/${retries})`);
   
-        const response = await fetchWithTimeout("http://localhost:3000/api/countries", {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/api/countries`, {
           timeout: 8000, // 8 saniye timeout
           headers: {
             'Cache-Control': 'no-cache',
@@ -282,25 +285,30 @@ function onError(err) {
 }
 
 async function onSuccess(position) {
-  let lat = position.coords.latitude;
-  let lng = position.coords.longitude;
+  showLoading();
+  try {
+    const lat = position.coords.latitude;
+    const lng = position.coords.longitude;
+    const url = `${API_BASE_URL}/api/geocode?lat=${lat}&lng=${lng}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    const country = data.results[0].components.country;
 
-  const url = `http://localhost:3000/api/geocode?lat=${lat}&lng=${lng}`;
-
-  const response = await fetch(url);
-  const data = await response.json();
-
-  const country = data.results[0].components.country;
-
-  document.querySelector("#txtSearch").value = country;
-  document.querySelector("#btnSearch").click();
+    document.querySelector("#txtSearch").value = country;
+    document.querySelector("#btnSearch").click();
+  } catch (error) {
+    console.error("Konum bilgisi alınırken bir hata oluştu:", error);
+  } finally {
+    hideLoading();
+  }
 }
 
 async function getCountry(country) {
+  showLoading();
   try {
-    showLoading();
     const response = await fetch(
-      `http://localhost:3000/api/countries/name/${encodeURIComponent(country)}`
+      `${API_BASE_URL}/api/countries/name/${encodeURIComponent(country)}`
     );
 
     if (!response.ok) {
@@ -333,15 +341,7 @@ async function getCountry(country) {
       return;
     }
 
-    const response2 = await fetch(
-      `http://localhost:3000/api/countries/codes/${borders.join(",")}`
-    );
-
-    if (!response2.ok) {
-      throw new Error("Komşu ülkeler getirilemedi");
-    }
-
-    const neighbors = await response2.json();
+    const neighbors = await getBorderCountries(borders);
     if (Array.isArray(neighbors) && neighbors.length > 0) {
       neighborsHtml += '<div class="neighbors-grid">';
       neighbors.forEach((country) => {
@@ -433,7 +433,7 @@ async function getWeatherData(lat, lng) {
   }
 
   const response = await fetch(
-    `http://localhost:3000/api/weather?lat=${lat}&lon=${lng}`
+    `${API_BASE_URL}/api/weather?lat=${lat}&lon=${lng}`
   );
   if (!response.ok) throw new Error("Hava durumu verisi alınamadı");
 
@@ -604,7 +604,7 @@ async function updateMap(data) {
           clickTimeout = setTimeout(async () => {
             try {
               const response = await fetch(
-                `http://localhost:3000/api/geocode?lat=${lat}&lng=${lng}`
+                `${API_BASE_URL}/api/geocode?lat=${lat}&lng=${lng}`
               );
               const data = await response.json();
 
@@ -817,7 +817,7 @@ async function updateCurrencyConverter(data) {
   const newConvertBtn = document.getElementById("convertBtn");
 
   try {
-    const response = await fetch(`http://localhost:3000/api/currency?from=USD`);
+    const response = await fetch(`${API_BASE_URL}/api/currency?from=USD`);
     const currencyData = await response.json();
     const currencies = Object.keys(currencyData.rates);
     const countryCurrency = Object.keys(data.currencies)[0];
@@ -850,7 +850,7 @@ async function updateCurrencyConverter(data) {
           '<div class="alert alert-info">Dönüştürülüyor...</div>';
 
         const response = await fetch(
-          `http://localhost:3000/api/currency?from=${fromCurrency}&to=${toCurrency}&amount=${amountValue}`
+          `${API_BASE_URL}/api/currency?from=${fromCurrency}&to=${toCurrency}&amount=${amountValue}`
         );
         const data = await response.json();
         const result = amountValue * data.rates[toCurrency];
@@ -1004,3 +1004,47 @@ document
     }
     getCountriesByContinent(continent);
   });
+
+async function getBorderCountries(borders) {
+  if (!borders || borders.length === 0) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/countries/codes/${borders.join(",")}`
+    );
+    if (!response.ok) {
+      throw new Error("Komşu ülkeler getirilemedi");
+    }
+    const neighbors = await response.json();
+    if (Array.isArray(neighbors) && neighbors.length > 0) {
+      return neighbors;
+    }
+  } catch (error) {
+    console.error("Komşu ülkeler getirilemedi:", error);
+  }
+  return [];
+}
+
+async function updateGeocodingInfo(lat, lng) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/geocode?lat=${lat}&lng=${lng}`
+    );
+    const data = await response.json();
+    if (data.results && data.results.length > 0) {
+      const result = data.results[0];
+      const cityName =
+        result.components.city ||
+        result.components.town ||
+        result.components.village ||
+        result.components.county ||
+        "Bilinmeyen Bölge";
+
+      await updateWeatherInfo(cityName, lat, lng, false);
+    }
+  } catch (error) {
+    console.error("Geocoding error:", error);
+  }
+}

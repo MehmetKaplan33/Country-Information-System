@@ -2,10 +2,14 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Statik dosyaları sun
+app.use(express.static(path.join(__dirname, '/')));
 
 // API keylerini kontrol et
 console.log('Environment variables check:');
@@ -213,5 +217,21 @@ app.get('/api/countries/codes/:codes', async (req, res) => {
     }
 });
 
+// Ana sayfaya istek geldiğinde index.html'i sun
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Tüm diğer GET isteklerini index.html'e yönlendir (SPA için)
+app.get('*', (req, res) => {
+  // Sadece API olmayan istekleri yönlendir
+  if (!req.path.startsWith('/api/')) {
+    res.sendFile(path.join(__dirname, 'index.html'));
+  }
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// Vercel'in düzgün çalışması için gerekli
+module.exports = app;
