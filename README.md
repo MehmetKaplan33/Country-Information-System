@@ -113,5 +113,5 @@ Proje Linki: [https://github.com/mehmetkaplanse/Country-Information-System](http
 ---
 
 <div align="center">
-Made with ❤️ by Mehmet KAPLAN
+Made with by Mehmet KAPLAN
 </div>
