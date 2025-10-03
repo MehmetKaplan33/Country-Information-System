@@ -95,7 +95,7 @@ npm start
 
 ## 📝 Lisans
 
-Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICENSE) dosyasına bakınız.
+Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [MIT License](https://opensource.org/licenses/MIT). dosyasına bakınız.
 
 ## 👏 Teşekkürler
 
